@@ -1,0 +1,29 @@
+# Archivos de configuración sensibles
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Dependencias (se instalan con npm/pnpm)
+node_modules/
+/frontend/node_modules
+/backend/node_modules
+
+# Archivos de compilación y caché de Next.js
+/frontend/.next/
+/frontend/out/
+
+# Archivos de compilación de TypeScript del Backend
+/backend/dist/
+
+# Archivos de logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Otros
+.DS_Store

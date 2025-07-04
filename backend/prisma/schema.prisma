@@ -1,0 +1,493 @@
+// ¿Por qué este schema?
+// - Refleja exactamente nuestra base de datos SQL
+// - Prisma generará el cliente TypeScript automáticamente
+// - Facilita las migraciones y cambios de esquema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================
+// MODELOS DE AUTENTICACIÓN
+// =============================================
+
+model Role {
+  id          Int       @id @default(autoincrement())
+  nombre      String    @unique @db.VarChar(50)
+  descripcion String?
+  permisos    Json      @default("{}")
+  activo      Boolean   @default(true)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  
+  usuarios    Usuario[]
+  
+  @@map("roles")
+}
+
+model Usuario {
+  id                Int       @id @default(autoincrement())
+  nombreUsuario     String    @unique @map("nombre_usuario") @db.VarChar(50)
+  email             String    @unique @db.VarChar(255)
+  contrasenaHash    String    @map("contrasena_hash") @db.VarChar(255)
+  rolId             Int       @map("rol_id")
+  activo            Boolean   @default(true)
+  emailVerificado   Boolean   @default(false) @map("email_verificado")
+  ultimoLogin       DateTime? @map("ultimo_login")
+  intentosLogin     Int       @default(0) @map("intentos_login")
+  bloqueadoHasta    DateTime? @map("bloqueado_hasta")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  
+  rol               Role      @relation(fields: [rolId], references: [id])
+  auth2fa           Auth2FA?
+  auditoria         Auditoria[]
+  logs              LogSistema[]
+  notificaciones    Notificacion[]
+  
+  @@map("usuarios")
+}
+
+model Auth2FA {
+  id              Int      @id @default(autoincrement())
+  usuarioId       Int      @unique @map("usuario_id")
+  secret          String?  @db.VarChar(255)
+  backupCodes     String[] @map("backup_codes")
+  phone           String?  @db.VarChar(20)
+  email2fa        String?  @map("email_2fa") @db.VarChar(255)
+  metodoPreferido String   @default("app") @map("metodo_preferido") @db.VarChar(20)
+  activo          Boolean  @default(false)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  
+  usuario         Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  
+  @@map("auth_2fa")
+}
+
+model CodigoTemporal {
+  id        Int      @id @default(autoincrement())
+  usuarioId Int      @map("usuario_id")
+  codigo    String   @db.VarChar(10)
+  tipo      String   @db.VarChar(20)
+  usado     Boolean  @default(false)
+  expiraEn  DateTime @map("expira_en")
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  
+  @@map("codigos_temporales")
+}
+
+// =============================================
+// MODELOS PRINCIPALES
+// =============================================
+
+model Atleta {
+  id               Int       @id @default(autoincrement())
+  nombre           String    @db.VarChar(100)
+  apellido         String    @db.VarChar(100)
+  fechaNacimiento  DateTime  @map("fecha_nacimiento") @db.Date
+  genero           String    @db.VarChar(20)
+  pais             String    @db.VarChar(100)
+  ciudad           String?   @db.VarChar(100)
+  email            String?   @db.VarChar(255)
+  telefono         String?   @db.VarChar(20)
+  pesoCorporal     Decimal?  @map("peso_corporal") @db.Decimal(5,2)
+  altura           Int?
+  categoriaPeso    String?   @map("categoria_peso") @db.VarChar(10)
+  federacionId     String?   @map("federacion_id") @db.VarChar(50)
+  activo           Boolean   @default(true)
+  notas            String?
+  fotoUrl          String?   @map("foto_url") @db.VarChar(500)
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  
+  entrenamientos      Entrenamiento[]
+  resultados          Resultado[]
+  rendimiento         Rendimiento[]
+  planesEntrenamiento PlanEntrenamiento[]
+  planesAlimentacion  PlanAlimentacion[]
+  entrenadorAtleta    EntrenadorAtleta[]
+  inscripciones       Inscripcion[]
+  
+  @@map("atletas")
+}
+
+model Entrenador {
+  id              Int      @id @default(autoincrement())
+  nombre          String   @db.VarChar(100)
+  apellido        String   @db.VarChar(100)
+  email           String?  @db.VarChar(255)
+  telefono        String?  @db.VarChar(20)
+  experiencia     String
+  certificaciones String[]
+  especialidades  String[]
+  rating          Decimal  @default(0.00) @db.Decimal(3,2)
+  totalAtletas    Int      @default(0) @map("total_atletas")
+  activo          Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  
+  entrenamientos      Entrenamiento[]
+  planesEntrenamiento PlanEntrenamiento[]
+  entrenadorAtleta    EntrenadorAtleta[]
+  
+  @@map("entrenadores")
+}
+
+model EntrenadorAtleta {
+  id           Int      @id @default(autoincrement())
+  entrenadorId Int      @map("entrenador_id")
+  atletaId     Int      @map("atleta_id")
+  fechaInicio  DateTime @map("fecha_inicio") @db.Date
+  fechaFin     DateTime? @map("fecha_fin") @db.Date
+  activo       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  
+  entrenador   Entrenador @relation(fields: [entrenadorId], references: [id])
+  atleta       Atleta     @relation(fields: [atletaId], references: [id])
+  
+  @@unique([entrenadorId, atletaId, fechaInicio])
+  @@map("entrenador_atleta")
+}
+
+model Organizador {
+  id                     Int      @id @default(autoincrement())
+  nombre                 String   @db.VarChar(100)
+  apellido               String   @db.VarChar(100)
+  organizacion           String?  @db.VarChar(255)
+  email                  String   @db.VarChar(255)
+  telefono               String?  @db.VarChar(20)
+  pais                   String?  @db.VarChar(100)
+  ciudad                 String?  @db.VarChar(100)
+  experiencia            String?
+  competenciasOrganizadas Int     @default(0) @map("competencias_organizadas")
+  activo                 Boolean  @default(true)
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+  
+  competencias           Competencia[]
+  
+  @@map("organizadores")
+}
+
+model Competencia {
+  id                  Int      @id @default(autoincrement())
+  nombre              String   @db.VarChar(255)
+  fecha               DateTime @db.Date
+  fechaFin            DateTime? @map("fecha_fin") @db.Date
+  ubicacion           String   @db.VarChar(255)
+  tipo                String   @db.VarChar(50)
+  organizadorId       Int?     @map("organizador_id")
+  descripcion         String?
+  estado              String   @default("programada") @db.VarChar(20)
+  maxParticipantes    Int?     @map("max_participantes")
+  costoInscripcion    Decimal? @map("costo_inscripcion") @db.Decimal(10,2)
+  federacionSancionada Boolean @default(false) @map("federacion_sancionada")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+  
+  organizador         Organizador? @relation(fields: [organizadorId], references: [id])
+  eventos             Evento[]
+  inscripciones       Inscripcion[]
+  
+  @@map("competencias")
+}
+
+model Evento {
+  id            Int      @id @default(autoincrement())
+  competenciaId Int      @map("competencia_id")
+  nombre        String   @db.VarChar(255)
+  categoria     String   @db.VarChar(100)
+  categoriaPeso String?  @map("categoria_peso") @db.VarChar(10)
+  genero        String?  @db.VarChar(20)
+  fecha         DateTime @db.Date
+  horaInicio    DateTime? @map("hora_inicio") @db.Time
+  ordenEvento   Int?     @map("orden_evento")
+  estado        String   @default("programado") @db.VarChar(20)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  
+  competencia   Competencia @relation(fields: [competenciaId], references: [id], onDelete: Cascade)
+  resultados    Resultado[]
+  inscripciones Inscripcion[]
+  
+  @@map("eventos")
+}
+
+model Inscripcion {
+  id              Int      @id @default(autoincrement())
+  competenciaId   Int      @map("competencia_id")
+  atletaId        Int      @map("atleta_id")
+  eventoId        Int?     @map("evento_id")
+  fechaInscripcion DateTime @default(now()) @map("fecha_inscripcion")
+  pesoDeclarado   Decimal? @map("peso_declarado") @db.Decimal(5,2)
+  categoriaPeso   String?  @map("categoria_peso") @db.VarChar(10)
+  pagado          Boolean  @default(false)
+  confirmado      Boolean  @default(false)
+  notas           String?
+  
+  competencia     Competencia @relation(fields: [competenciaId], references: [id], onDelete: Cascade)
+  atleta          Atleta      @relation(fields: [atletaId], references: [id])
+  evento          Evento?     @relation(fields: [eventoId], references: [id])
+  
+  @@unique([competenciaId, atletaId, eventoId])
+  @@map("inscripciones")
+}
+
+// =============================================
+// MODELOS DE RESULTADOS
+// =============================================
+
+model Resultado {
+  id                    Int      @id @default(autoincrement())
+  eventoId              Int      @map("evento_id")
+  atletaId              Int      @map("atleta_id")
+  
+  // Sentadilla
+  sentadilla1           Decimal? @map("sentadilla_1") @db.Decimal(6,2)
+  sentadilla1Valido     Boolean? @map("sentadilla_1_valido")
+  sentadilla2           Decimal? @map("sentadilla_2") @db.Decimal(6,2)
+  sentadilla2Valido     Boolean? @map("sentadilla_2_valido")
+  sentadilla3           Decimal? @map("sentadilla_3") @db.Decimal(6,2)
+  sentadilla3Valido     Boolean? @map("sentadilla_3_valido")
+  sentadillaMejor       Decimal? @map("sentadilla_mejor") @db.Decimal(6,2)
+  
+  // Press Banca
+  pressBanca1           Decimal? @map("press_banca_1") @db.Decimal(6,2)
+  pressBanca1Valido     Boolean? @map("press_banca_1_valido")
+  pressBanca2           Decimal? @map("press_banca_2") @db.Decimal(6,2)
+  pressBanca2Valido     Boolean? @map("press_banca_2_valido")
+  pressBanca3           Decimal? @map("press_banca_3") @db.Decimal(6,2)
+  pressBanca3Valido     Boolean? @map("press_banca_3_valido")
+  pressBancaMejor       Decimal? @map("press_banca_mejor") @db.Decimal(6,2)
+  
+  // Peso Muerto
+  pesoMuerto1           Decimal? @map("peso_muerto_1") @db.Decimal(6,2)
+  pesoMuerto1Valido     Boolean? @map("peso_muerto_1_valido")
+  pesoMuerto2           Decimal? @map("peso_muerto_2") @db.Decimal(6,2)
+  pesoMuerto2Valido     Boolean? @map("peso_muerto_2_valido")
+  pesoMuerto3           Decimal? @map("peso_muerto_3") @db.Decimal(6,2)
+  pesoMuerto3Valido     Boolean? @map("peso_muerto_3_valido")
+  pesoMuertoMejor       Decimal? @map("peso_muerto_mejor") @db.Decimal(6,2)
+  
+  // Totales
+  total                 Decimal? @db.Decimal(6,2)
+  pesoCorporal          Decimal  @map("peso_corporal") @db.Decimal(5,2)
+  categoriaPeso         String   @map("categoria_peso") @db.VarChar(10)
+  wilksScore            Decimal? @map("wilks_score") @db.Decimal(6,2)
+  dotsScore             Decimal? @map("dots_score") @db.Decimal(6,2)
+  
+  posicion              Int?
+  descalificado         Boolean  @default(false)
+  razonDescalificacion  String?  @map("razon_descalificacion")
+  equipoUsado           String?  @map("equipo_usado") @db.VarChar(100)
+  notas                 String?
+  
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+  
+  evento                Evento   @relation(fields: [eventoId], references: [id], onDelete: Cascade)
+  atleta                Atleta   @relation(fields: [atletaId], references: [id])
+  
+  @@unique([eventoId, atletaId])
+  @@map("resultados")
+}
+
+// =============================================
+// MODELOS DE ENTRENAMIENTO
+// =============================================
+
+model Entrenamiento {
+  id                  Int      @id @default(autoincrement())
+  atletaId            Int      @map("atleta_id")
+  entrenadorId        Int?     @map("entrenador_id")
+  fecha               DateTime @db.Date
+  horaInicio          DateTime? @map("hora_inicio") @db.Time
+  horaFin             DateTime? @map("hora_fin") @db.Time
+  duracion            Int?     // en minutos
+  tipoEntrenamiento   String?  @map("tipo_entrenamiento") @db.VarChar(50)
+  intensidad          String?  @db.VarChar(20)
+  descripcion         String
+  ejercicios          Json?
+  rpePromedio         Decimal? @map("rpe_promedio") @db.Decimal(3,1)
+  volumenTotal        Decimal? @map("volumen_total") @db.Decimal(8,2)
+  intensidadPromedio  Decimal? @map("intensidad_promedio") @db.Decimal(5,2)
+  notas               String?
+  completado          Boolean  @default(false)
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+  
+  atleta              Atleta      @relation(fields: [atletaId], references: [id])
+  entrenador          Entrenador? @relation(fields: [entrenadorId], references: [id])
+  
+  @@map("entrenamientos")
+}
+
+model Rendimiento {
+  id            Int      @id @default(autoincrement())
+  atletaId      Int      @map("atleta_id")
+  fecha         DateTime @db.Date
+  sentadilla    Decimal? @db.Decimal(6,2)
+  pressBanca    Decimal? @map("press_banca") @db.Decimal(6,2)
+  pesoMuerto    Decimal? @map("peso_muerto") @db.Decimal(6,2)
+  total         Decimal? @db.Decimal(6,2)
+  pesoCorporal  Decimal  @map("peso_corporal") @db.Decimal(5,2)
+  wilks         Decimal? @db.Decimal(6,2)
+  dots          Decimal? @db.Decimal(6,2)
+  tipoRegistro  String   @default("entrenamiento") @map("tipo_registro") @db.VarChar(20)
+  notas         String?
+  createdAt     DateTime @default(now()) @map("created_at")
+  
+  atleta        Atleta   @relation(fields: [atletaId], references: [id])
+  
+  @@unique([atletaId, fecha, tipoRegistro])
+  @@map("rendimiento")
+}
+
+// =============================================
+// MODELOS DE PLANES IA
+// =============================================
+
+model PlanEntrenamiento {
+  id            String   @id @default(uuid()) @db.Uuid
+  atletaId      Int      @map("atleta_id")
+  entrenadorId  Int?     @map("entrenador_id")
+  nombre        String   @db.VarChar(255)
+  objetivo      String   @db.VarChar(100)
+  nivel         String   @db.VarChar(50)
+  frecuencia    Int
+  duracionSemanas Int    @map("duracion_semanas")
+  planDetallado String   @map("plan_detallado")
+  ejercicios    Json
+  fechaInicio   DateTime? @map("fecha_inicio") @db.Date
+  fechaFin      DateTime? @map("fecha_fin") @db.Date
+  activo        Boolean  @default(true)
+  generadoPorIA Boolean  @default(false) @map("generado_por_ia")
+  parametrosIA  Json?    @map("parametros_ia")
+  modeloIA      String?  @map("modelo_ia") @db.VarChar(50)
+  progreso      Json     @default("{}")
+  feedback      String?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  
+  atleta        Atleta      @relation(fields: [atletaId], references: [id])
+  entrenador    Entrenador? @relation(fields: [entrenadorId], references: [id])
+  
+  @@map("planes_entrenamiento")
+}
+
+model PlanAlimentacion {
+  id              String   @id @default(uuid()) @db.Uuid
+  atletaId        Int      @map("atleta_id")
+  nombre          String   @db.VarChar(255)
+  objetivo        String   @db.VarChar(100)
+  pesoActual      Decimal  @map("peso_actual") @db.Decimal(5,2)
+  pesoObjetivo    Decimal? @map("peso_objetivo") @db.Decimal(5,2)
+  actividadNivel  String   @map("actividad_nivel") @db.VarChar(50)
+  restricciones   String?
+  preferencias    String?
+  planDetallado   String   @map("plan_detallado")
+  caloriasDiarias Int      @map("calorias_diarias")
+  macros          Json
+  comidas         Json
+  duracionSemanas Int      @map("duracion_semanas")
+  fechaInicio     DateTime? @map("fecha_inicio") @db.Date
+  fechaFin        DateTime? @map("fecha_fin") @db.Date
+  activo          Boolean  @default(true)
+  generadoPorIA   Boolean  @default(false) @map("generado_por_ia")
+  parametrosIA    Json?    @map("parametros_ia")
+  modeloIA        String?  @map("modelo_ia") @db.VarChar(50)
+  adherencia      Json     @default("{}")
+  resultados      Json     @default("{}")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  
+  atleta          Atleta   @relation(fields: [atletaId], references: [id])
+  
+  @@map("planes_alimentacion")
+}
+
+// =============================================
+// MODELOS DE CONFIGURACIÓN
+// =============================================
+
+model Configuracion {
+  id          Int      @id @default(autoincrement())
+  clave       String   @unique @db.VarChar(100)
+  valor       String
+  tipo        String   @default("string") @db.VarChar(20)
+  descripcion String?
+  categoria   String?  @db.VarChar(50)
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  
+  @@map("configuracion")
+}
+
+model CategoriaPeso {
+  id          Int      @id @default(autoincrement())
+  genero      String   @db.VarChar(20)
+  pesoLimite  Decimal  @map("peso_limite") @db.Decimal(5,2)
+  nombre      String   @db.VarChar(10)
+  federacion  String   @default("IPF") @db.VarChar(50)
+  activo      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  
+  @@map("categorias_peso")
+}
+
+// =============================================
+// MODELOS DE AUDITORÍA
+// =============================================
+
+model Auditoria {
+  id               Int      @id @default(autoincrement())
+  tabla            String   @db.VarChar(50)
+  registroId       Int      @map("registro_id")
+  accion           String   @db.VarChar(20)
+  usuarioId        Int?     @map("usuario_id")
+  datosAnteriores  Json?    @map("datos_anteriores")
+  datosNuevos      Json?    @map("datos_nuevos")
+  ipAddress        String?  @map("ip_address")
+  userAgent        String?  @map("user_agent")
+  createdAt        DateTime @default(now()) @map("created_at")
+  
+  usuario          Usuario? @relation(fields: [usuarioId], references: [id])
+  
+  @@map("auditoria")
+}
+
+model LogSistema {
+  id        Int      @id @default(autoincrement())
+  nivel     String   @db.VarChar(20)
+  mensaje   String
+  contexto  Json?
+  usuarioId Int?     @map("usuario_id")
+  ipAddress String?  @map("ip_address")
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id])
+  
+  @@map("logs_sistema")
+}
+
+model Notificacion {
+  id        Int      @id @default(autoincrement())
+  usuarioId Int      @map("usuario_id")
+  titulo    String   @db.VarChar(255)
+  mensaje   String
+  tipo      String   @db.VarChar(50)
+  leida     Boolean  @default(false)
+  url       String?  @db.VarChar(500)
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id])
+  
+  @@map("notificaciones")
+}
